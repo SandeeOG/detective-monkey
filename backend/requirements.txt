@@ -1,0 +1,9 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+pydantic==2.9.2
+pydantic[email]==2.9.2
+python-multipart==0.0.9
+# Optional: only needed if you want live LLM responses in the AI Coach.
+# The app falls back to a deterministic explainer when this is absent.
+anthropic==0.39.0
