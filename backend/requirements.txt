@@ -4,6 +4,11 @@ sqlalchemy==2.0.35
 pydantic==2.9.2
 pydantic[email]==2.9.2
 python-multipart==0.0.9
-# Optional: only needed if you want live LLM responses in the AI Coach.
-# The app falls back to a deterministic explainer when this is absent.
+# --- Optional LLM provider SDKs ---
+# The AI Coach is provider-agnostic. Install only the SDK for the provider you
+# select via LLM_PROVIDER; with none configured it uses an offline fallback that
+# needs no extra dependencies.
+#   LLM_PROVIDER=anthropic  ->  anthropic
 anthropic==0.39.0
+#   LLM_PROVIDER=gemini     ->  google-genai
+google-genai>=0.3.0

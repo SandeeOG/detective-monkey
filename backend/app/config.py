@@ -14,9 +14,11 @@ TOKEN_TTL_SECONDS = int(os.getenv("DM_TOKEN_TTL", str(60 * 60 * 24 * 7)))  # 7 d
 DATABASE_URL = os.getenv("DM_DATABASE_URL", f"sqlite:///{BASE_DIR / 'detective_monkey.db'}")
 
 # --- AI Coach (LLM) ---
-# If ANTHROPIC_API_KEY is set the coach uses Claude; otherwise a deterministic
-# template-based explainer is used so the feature works with no external deps.
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.getenv("DM_LLM_MODEL", "claude-sonnet-4-6")
+# Provider selection is environment-driven and handled by app.llm.factory:
+#   LLM_PROVIDER  (anthropic | gemini | fallback; default: fallback)
+#   LLM_API_KEY   API key for the selected provider
+#   LLM_MODEL     optional model id override
+# With no provider configured the coach uses a deterministic offline fallback,
+# so the feature works out-of-the-box with no external dependencies.
 
 STATIC_DIR = BASE_DIR / "static"
