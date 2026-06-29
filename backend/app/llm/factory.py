@@ -16,12 +16,15 @@ to ``PROVIDERS`` below.
 """
 from __future__ import annotations
 
+import logging
 import os
 
 from .base import ChatRequest, LLMProvider
 from .providers.anthropic_provider import AnthropicProvider
 from .providers.fallback import FallbackProvider
 from .providers.gemini_provider import GeminiProvider
+
+logger = logging.getLogger("app.llm")
 
 # Registry of available providers. Aliases are welcome (e.g. "google" -> Gemini).
 PROVIDERS: dict[str, type[LLMProvider]] = {
@@ -52,6 +55,9 @@ class _DegradingProvider(LLMProvider):
         try:
             return self._inner.generate(request)
         except Exception as e:  # noqa: BLE001 — any SDK/transport error degrades
+            # Full detail goes to the server log only — the user-facing note stays
+            # generic so we never leak API keys or raw provider internals to the client.
+            logger.exception("LLM provider '%s' (model=%s) failed", self._inner.name, self._inner.model)
             note = (f"\n\n_(AI service unavailable: {type(e).__name__}; "
                     "showing built-in guidance.)_")
             return self._fallback.generate(request) + note
