@@ -12,29 +12,31 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import FeatureVector, Profile, Recommendation, User
+from ..models import Profile, Recommendation, User
 from ..recommender import _career_score, _skill_gaps
 from ..seed_data import CONSTRUCTS, CONSTRUCT_LABELS
+from ..student_intelligence import service as intelligence
 
 router = APIRouter(prefix="/api/report", tags=["report"])
 
 
 @router.get("")
 def report(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    fv = db.query(FeatureVector).filter(FeatureVector.user_id == user.id).first()
+    intel = intelligence.get_profile(db, user.id)
     recs = (
         db.query(Recommendation)
         .filter(Recommendation.user_id == user.id)
         .order_by(Recommendation.rank)
         .all()
     )
-    if not fv or not recs:
+    if not intel or not recs:
         raise HTTPException(400, "Complete the assessment and generate recommendations first")
 
+    vector = intelligence.construct_vector(intel)
     profile = db.query(Profile).filter(Profile.user_id == user.id).first()
     domain_of = {c: d for d, cs in CONSTRUCTS.items() for c in cs}
 
-    strengths = sorted(fv.vector.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    strengths = sorted(vector.items(), key=lambda kv: kv[1], reverse=True)[:5]
     strengths_out = [
         {"label": CONSTRUCT_LABELS.get(c, c), "domain": domain_of.get(c, ""), "score": v}
         for c, v in strengths
@@ -42,7 +44,7 @@ def report(db: Session = Depends(get_db), user: User = Depends(get_current_user)
 
     rec_out, all_gaps = [], []
     for r in recs:
-        _, contributions = _career_score(fv.vector, r.career.profile_weights or {})
+        _, contributions = _career_score(vector, r.career.profile_weights or {})
         gaps = _skill_gaps(contributions)
         all_gaps.extend(gaps)
         rec_out.append({
@@ -80,6 +82,18 @@ def report(db: Session = Depends(get_db), user: User = Depends(get_current_user)
         "recommendations": rec_out,
         "skill_gaps": ordered_gaps[:5],
         "next_steps": next_steps,
+        # --- Student Intelligence Profile enrichment (additive) ---
+        "domain_scores": [{"domain": d.domain, "score": d.score} for d in intel.domain_scores],
+        "derived_features": [
+            {"label": f.label, "level": f.level, "value": f.value}
+            for f in sorted(intel.derived_features, key=lambda x: x.value, reverse=True)[:5]
+        ],
+        "reliability": {
+            "reliability_score": intel.reliability.reliability_score,
+            "confidence_level": intel.reliability.confidence_level,
+            "completion_rate": intel.reliability.completion_rate,
+            "response_consistency": intel.reliability.response_consistency,
+        } if intel.reliability else None,
         "disclaimer": (
             "This report offers guidance, not a prediction or guarantee. It is a starting "
             "point for conversations with the people who support you."

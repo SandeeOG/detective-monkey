@@ -18,11 +18,12 @@ full FR-001 → FR-008 scope:
 ## Architecture
 
 - **Backend:** FastAPI + SQLAlchemy + SQLite — REST API under `/api`.
-  - Assessment scoring (`scoring.py`): responses → construct scores → normalised feature vector.
-  - Recommendation engine (`recommender.py`): transparent weighted-similarity matching with explanations + skill gaps.
+  - **Student Intelligence Engine V2** (`app/student_intelligence/`): a modular, deterministic, explainable pipeline — validate → process → score constructs → score domains → reliability → engineer features → build profile. It is the single source of truth for understanding a student and is fully testable without FastAPI (pure `engine.run()`). Output is a normalized **Student Intelligence Profile** (construct scores, domain scores, derived features with provenance, reliability metrics, versioned metadata) persisted across `intelligence_profiles`, `construct_scores`, `domain_scores`, `derived_features`, `reliability_metrics`. The recommendation engine, AI coach and reports all consume this profile (via the intelligence service) rather than reprocessing responses. Exposed at `GET /api/intelligence/profile` and `GET /api/intelligence/analytics`.
+  - **Career Knowledge System** (`models.py`): the single source of truth for career data, normalized into related tables — `careers`, `skills` (+ importance), `subjects`, `industries`, `tools`, `career_traits`, `responsibilities`, `education_steps` and `career_relations`. Derived `Career.profile_weights` / `Career.education_pathway` properties give downstream consumers a stable interface. Designed to extend to universities, certifications, scholarships, companies and labour-market data without schema redesign.
+  - Recommendation engine (`recommender.py`): transparent weighted-similarity matching (sourced from `career_traits`) with explanations + skill gaps.
   - AI coach (`coach.py`): provider-agnostic LLM layer (`app/llm/`) — Anthropic, Gemini, or a deterministic offline fallback, selected via `LLM_PROVIDER`.
 - **Frontend:** responsive vanilla-JS single-page app served by the same server (no build step).
-- **Data:** 16 psychometric constructs, a 32-item question bank, and 14 seeded careers.
+- **Data:** 16 psychometric constructs, a 32-item question bank, and 14 seeded careers normalized across ~40 skills, 15 subjects, 14 industries and 12 tools.
 
 The LLM is an **explanation layer only** — scores and rankings come from the
 deterministic engine, matching the PRD's "guidance, not prediction" principle.

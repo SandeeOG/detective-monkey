@@ -1,4 +1,8 @@
-"""Assessment engine endpoints (FR-003 / PRD section 10)."""
+"""Assessment engine endpoints (FR-003 / PRD section 10).
+
+Collects responses and delegates all interpretation to the Student Intelligence
+Engine (``app.student_intelligence``). This router contains no scoring logic.
+"""
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,10 +10,10 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import AssessmentSession, FeatureVector, Question, Response, User
+from ..models import AssessmentSession, Question, Response, StudentIntelligenceProfile, User
 from ..schemas import SubmitIn
-from ..scoring import ALL_CONSTRUCTS, compute_feature_vector
-from ..seed_data import CONSTRUCTS, CONSTRUCT_LABELS
+from ..student_intelligence import service as intelligence
+from ..student_intelligence.config import ALL_CONSTRUCTS, DOMAIN_OF, LABELS
 
 router = APIRouter(prefix="/api/assessment", tags=["assessment"])
 
@@ -17,6 +21,8 @@ router = APIRouter(prefix="/api/assessment", tags=["assessment"])
 @router.get("/questions")
 def get_questions(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Return the question bank grouped by domain (no scoring metadata leaked)."""
+    from ..seed_data import CONSTRUCTS
+
     questions = db.query(Question).order_by(Question.order_index).all()
     by_domain: dict[str, list] = {domain: [] for domain in CONSTRUCTS}
     for q in questions:
@@ -30,7 +36,6 @@ def get_questions(db: Session = Depends(get_db), user: User = Depends(get_curren
 
 @router.post("/submit")
 def submit(payload: SubmitIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    total_questions = db.query(Question).count()
     if not payload.responses:
         raise HTTPException(400, "No responses provided")
 
@@ -43,48 +48,36 @@ def submit(payload: SubmitIn, db: Session = Depends(get_db), user: User = Depend
         db.add(Response(session_id=session.id, question_id=r.question_id, value=r.value))
         pairs.append((r.question_id, r.value))
 
-    vector = compute_feature_vector(db, pairs)
-    answered_ratio = round(len(pairs) / total_questions, 3) if total_questions else 0.0
-
-    fv = db.query(FeatureVector).filter(FeatureVector.user_id == user.id).first()
-    if fv:
-        fv.vector = vector
-        fv.session_id = session.id
-        fv.created_at = datetime.utcnow()
-    else:
-        db.add(FeatureVector(user_id=user.id, session_id=session.id, vector=vector))
+    # The intelligence engine produces and stores the canonical profile.
+    profile = intelligence.generate_profile(db, user.id, session.id, pairs)
     db.commit()
     return {
         "session_id": session.id,
-        "answered_ratio": answered_ratio,
-        "feature_vector": _labelled(vector),
+        "answered_ratio": intelligence.completion_rate(profile),
+        "feature_vector": _labelled(intelligence.construct_vector(profile)),
     }
 
 
 @router.get("/feature-vector")
 def feature_vector(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    fv = db.query(FeatureVector).filter(FeatureVector.user_id == user.id).first()
-    if not fv:
+    profile = intelligence.get_profile(db, user.id)
+    if not profile:
         return {"completed": False, "feature_vector": None}
-    return {"completed": True, "feature_vector": _labelled(fv.vector), "raw": fv.vector}
+    vector = intelligence.construct_vector(profile)
+    return {"completed": True, "feature_vector": _labelled(vector), "raw": vector}
 
 
 @router.get("/status")
 def status(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    fv = db.query(FeatureVector).filter(FeatureVector.user_id == user.id).first()
+    completed = intelligence.get_profile(db, user.id) is not None
     sessions = db.query(AssessmentSession).filter(AssessmentSession.user_id == user.id).count()
-    return {"completed": fv is not None, "sessions": sessions}
+    return {"completed": completed, "sessions": sessions}
 
 
 def _labelled(vector: dict) -> list[dict]:
     """Attach human labels + domain grouping for UI display."""
-    domain_of = {c: d for d, cs in CONSTRUCTS.items() for c in cs}
-    out = []
-    for c in ALL_CONSTRUCTS:
-        out.append({
-            "construct": c,
-            "label": CONSTRUCT_LABELS.get(c, c),
-            "domain": domain_of.get(c, ""),
-            "score": vector.get(c, 0.5),
-        })
-    return out
+    return [
+        {"construct": c, "label": LABELS.get(c, c), "domain": DOMAIN_OF.get(c, ""),
+         "score": vector.get(c, 0.5)}
+        for c in ALL_CONSTRUCTS
+    ]

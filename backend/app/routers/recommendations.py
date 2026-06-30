@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import Career, FeatureVector, Question, Recommendation, Response, User
+from ..models import Career, Recommendation, User
 from ..recommender import generate_recommendations
+from ..student_intelligence import service as intelligence
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
@@ -32,21 +33,16 @@ def _serialize(rec: Recommendation) -> dict:
 
 @router.post("/generate")
 def generate(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    fv = db.query(FeatureVector).filter(FeatureVector.user_id == user.id).first()
-    if not fv:
+    # Consume the Student Intelligence Profile — never reprocess raw responses.
+    profile = intelligence.get_profile(db, user.id)
+    if not profile:
         raise HTTPException(400, "Complete the assessment before generating recommendations")
 
-    total_q = db.query(Question).count()
-    answered = (
-        db.query(Response)
-        .filter(Response.session_id == fv.session_id)
-        .count()
-        if fv.session_id else 0
-    )
-    answered_ratio = round(answered / total_q, 3) if total_q else 1.0
+    vector = intelligence.construct_vector(profile)
+    answered_ratio = intelligence.completion_rate(profile)
 
     careers = db.query(Career).all()
-    results = generate_recommendations(fv.vector, careers, answered_ratio, top_n=5)
+    results = generate_recommendations(vector, careers, answered_ratio, top_n=5)
 
     # Replace the previous batch for this user.
     db.query(Recommendation).filter(Recommendation.user_id == user.id).delete()

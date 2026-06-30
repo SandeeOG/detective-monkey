@@ -4,6 +4,7 @@ sqlalchemy==2.0.35
 pydantic==2.9.2
 pydantic[email]==2.9.2
 python-multipart==0.0.9
+python-dotenv==1.0.1
 # --- Optional LLM provider SDKs ---
 # The AI Coach is provider-agnostic. Install only the SDK for the provider you
 # select via LLM_PROVIDER; with none configured it uses an offline fallback that

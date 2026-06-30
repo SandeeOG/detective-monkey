@@ -15,6 +15,7 @@ from .routers import (
     careers,
     chat,
     feedback,
+    intelligence,
     profile,
     recommendations,
     report,
@@ -41,7 +42,7 @@ def health():
     return {"status": "ok", "service": "detective-monkey"}
 
 
-for r in (auth, profile, assessment, careers, recommendations, chat, feedback, report):
+for r in (auth, profile, assessment, careers, recommendations, chat, feedback, report, intelligence):
     app.include_router(r.router)
 
 # --- Static SPA ---

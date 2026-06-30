@@ -3,6 +3,11 @@
 Compares a Student Feature Vector against each career's ideal profile using a
 weighted similarity, producing a 0..100 compatibility score, a confidence
 band, a transparent explanation and skill-gap hints.
+
+The per-career ideal profile (``career.profile_weights``) is now sourced from
+the normalized ``CareerTrait`` table (via the derived property on
+:class:`app.models.Career`), replacing the old JSON ``profile_weights`` column.
+The matching/business logic below is unchanged.
 """
 from .seed_data import CONSTRUCT_LABELS
 
@@ -72,7 +77,7 @@ def generate_recommendations(vector: dict[str, float], careers, answered_ratio: 
     """Score every career and return the top N ranked recommendations."""
     scored = []
     for career in careers:
-        weights = career.profile_weights or {}
+        weights = career.profile_weights or {}  # {construct: ideal_score} from CareerTrait rows
         if not weights:
             continue
         score, contributions = _career_score(vector, weights)

@@ -5,8 +5,10 @@ MVP runs out-of-the-box with zero configuration.
 """
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # .../backend
+load_dotenv(BASE_DIR / ".env")
 
 # --- Core ---
 SECRET_KEY = os.getenv("DM_SECRET_KEY", "dev-secret-change-me-in-production")
